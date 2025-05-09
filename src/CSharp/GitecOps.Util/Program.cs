@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using GitecOps.Core.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,8 @@ public class Program
 
         // Run the actual logic here
         var app = host.Services.GetRequiredService<App>();
+        var deviceService = host.Services.GetService<DeviceService>();
+        
         return await app.RunAsync(args);
     }
 
@@ -25,6 +28,7 @@ public class Program
             .ConfigureServices((_, services) =>
             {
                 services.AddSingleton<App>();
+                services.AddScoped<DeviceService>();
                 // Add other services here
             });
 }

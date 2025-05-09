@@ -1,91 +1,100 @@
-﻿using System;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
-namespace GitecOps.Core.Models
+namespace GitecOps.Core.Models;
+
+public class Device
 {
-    public class Drive
+    private static readonly Regex HyphenRegex = new(@"^CTE-([A-Z]?\d{3})-V(\d{4,5})$", RegexOptions.IgnoreCase);
+    private static readonly Regex CompactRegex = new(@"^CTE([A-Z]?\d{3})V(\d{4,5})$", RegexOptions.IgnoreCase);
+    private static readonly Regex ExtendedRegex = new(@"^CTEV(\d{3,4})V(\d{5})$", RegexOptions.IgnoreCase);
+
+    public Device(string deviceName)
     {
-        public float Size { get; set; } // in gb
-        public float Used { get; set; } // in gb
-        public float Free { get; set; } // in gb
-        public float PercentUsed { get; set; } // in percent
-
-        public Drive(float size, float used)
-        {
-            Size = size;
-            Used = used;
-            Free = size - used;
-            PercentUsed = (used / size) * 100;
-        }
+        DeviceName = deviceName.ToUpperInvariant();
+        NormalizedName = NormalizeName(DeviceName);
+        IsValidDeviceName = string.Equals(DeviceName, NormalizedName, StringComparison.OrdinalIgnoreCase);
+        AssetNumber = NormalizedName.Split('-')[2];
+        SerialNumber = string.Empty;
     }
-    public class Device
+
+    public string DeviceName { get; set; }
+    public string NormalizedName { get; private init; }
+    public bool IsValidDeviceName { get; private init; }
+    public string SerialNumber { get; set; }
+    public string AssetNumber { get; set; }
+    public float TotalRam { get; set; } // in GB
+    public SystemOs OperatingSystem { get; set; } = new();
+    public ICollection<Drive> Drives { get; } = new List<Drive>();
+    public ICollection<Update> Updates { get; } = new List<Update>();
+
+    public void AddUpdate(Update update)
     {
-        public Device(string deviceName, DeviceTypeEnum deviceType = DeviceTypeEnum.Unknown)
-        {
-            DeviceName = deviceName;
-            DeviceType = deviceType;
-            NormalizedName = NormalizeName(deviceName);
-            IsValidDeviceName = string.Equals(DeviceName, NormalizedName, StringComparison.OrdinalIgnoreCase);
-        }
-
-        public string DeviceName { get; set; }
-        public DeviceTypeEnum DeviceType { get; set; }
-        public string NormalizedName { get; private set; }
-        public bool IsValidDeviceName { get; private set; }
-        public ICollection<Drive> Drives { get; } = [];
-        
-        public void AddDrive(Drive drive)
-        {
-            if (drive == null)
-            {
-                throw new ArgumentNullException(nameof(drive), "Drive cannot be null");
-            }
-            Drives.Add(drive);
-        }
-
-        private string NormalizeName(string name)
-        {
-            var upperName = name.ToUpperInvariant();
-
-            // Valid hyphenated: CTE-123-V1234 or CTE-123-V12345
-            var regexHyphen = new Regex(@"^CTE-(\d{3})-V(\d{4,5})$", RegexOptions.IgnoreCase);
-
-            // Compact: CTE123V1234 or CTE123V12345
-            var regexCompact = new Regex(@"^CTE(\d{3})V(\d{4,5})$", RegexOptions.IgnoreCase);
-
-            // Extended compact: CTEV123V12345
-            var regexExtended = new Regex(@"^CTEV(\d{3,4})V(\d{5})$", RegexOptions.IgnoreCase);
-
-            if (regexHyphen.IsMatch(upperName))
-            {
-                return upperName;
-            }
-
-            if (regexCompact.IsMatch(upperName))
-            {
-                var match = regexCompact.Match(upperName);
-                return $"CTE-{match.Groups[1].Value}-V{match.Groups[2].Value}";
-            }
-
-            if (regexExtended.IsMatch(upperName))
-            {
-                var match = regexExtended.Match(upperName);
-                return $"CTE-V{match.Groups[1].Value}-V{match.Groups[2].Value}";
-            }
-
-            throw new ArgumentException($"Invalid device name format: {name}");
-        }
-
-        public enum DeviceTypeEnum
-        {
-            Unknown,
-            Server,
-            Router,
-            Switch,
-            Firewall,
-            LoadBalancer,
-            Storage,
-            Other
-        }
+        ArgumentNullException.ThrowIfNull(update);
+        Updates.Add(update);
     }
+
+    public void AddDrive(Drive drive)
+    {
+        ArgumentNullException.ThrowIfNull(drive);
+        Drives.Add(drive);
+    }
+
+    private static string NormalizeName(string name)
+    {
+        if (HyphenRegex.IsMatch(name))
+            return name;
+
+        if (CompactRegex.Match(name) is { Success: true } compactMatch)
+            return $"CTE-{compactMatch.Groups[1].Value}-V{compactMatch.Groups[2].Value}";
+
+        if (ExtendedRegex.Match(name) is { Success: true } extendedMatch)
+            return $"CTE-V{extendedMatch.Groups[1].Value}-V{extendedMatch.Groups[2].Value}";
+
+        throw new ArgumentException($"Invalid device name format: {name}");
+    }
+
+    public enum DeviceTypeEnum
+    {
+        Unknown,
+        Server,
+        Workstation,
+        Other
+    }
+}
+
+public class Drive
+{
+    public Drive() : this('C', 0, 0, DriveType.Unknown) { }
+
+    public Drive(char driveLetter, float size, float used, DriveType driveType = DriveType.Unknown)
+    {
+        DriveLetter = driveLetter;
+        Size = size;
+        Used = used;
+        DriveType = driveType;
+        Free = size - used;
+        PercentUsed = size > 0 ? (used / size) * 100 : 0;
+    }
+
+    public char DriveLetter { get; set; }
+    public float Size { get; set; }
+    public float Used { get; set; }
+    public float Free { get; set; }
+    public float PercentUsed { get; set; }
+    public DriveType DriveType { get; set; }
+}
+
+public class SystemOs
+{
+    public string OperatingSystem { get; set; } = string.Empty;
+    public string Version { get; set; } = string.Empty;
+    public string ServicePack { get; set; } = string.Empty;
+    public string Platform { get; set; } = string.Empty;
+}
+
+public class Update
+{
+    public string HotfixId { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string InstalledOn { get; set; } = string.Empty;
 }
